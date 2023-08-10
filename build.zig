@@ -200,13 +200,22 @@ fn BuildExeEmscripten(b: *std.Build, target: std.zig.CrossTarget, optimize: std.
     // However, by creating an external function in our app.zig file that runs the main function,
     // then creating a .c file that calls that function, compiling it separately and linking it later,
     // that problem can be fixed.
-    const compileEntrypoint = b.addSystemCommand(&[_][]const u8{ emccRunArg, "-c", "entryPoint.c", "-o", "zig-out/bin/entrypoint.o" });
+    const compileEntrypoint = b.addSystemCommand(&[_][]const u8{emccRunArg});
+    if (appTarget.cpu_arch == .wasm64) {
+        //64 bit requires an extra parameter in emcc
+        compileEntrypoint.addArg("-sMEMORY64=1");
+        //compileEntrypoint.addArg("wasm64");
+    }
+    compileEntrypoint.addArgs(&[_][]const u8{ "-c", "entryPoint.c", "-o", "zig-out/bin/entrypoint.o" });
     compileEntrypoint.step.dependOn(&appLib.step);
     //We need to make the output directory
     // because emcc isn't smart enough to create it itself.
     try std.fs.cwd().makePath("zig-out/bin/applicationhtml");
-    //                                                             emcc    zig-out/lib/libapplication.a    raylib/zig-out/lib/libraylib.a    -o    zig-out/bin/applicationhtml/index.html    -s FULL_ES3=1    -s    USE_GLFW=3    -s    ASYNCIFY    -s    STANDALONE_WASM    -s    EXPORTED_FUNCTIONS=_run    --no-entry    -O3
     const linkWithEmscripten = b.addSystemCommand(&[_][]const u8{ emccRunArg, "zig-out/bin/entrypoint.o", "zig-out/lib/libapplication.a", "raylib/zig-out/lib/libraylib.a", "-o", "zig-out/bin/applicationhtml/index.html", "-sFULL-ES3=1", "-sUSE_GLFW=3", "-sASYNCIFY", "-sSTANDALONE_WASM", "-sEXPORTED_FUNCTIONS=_run", "-O3" });
+    if (appTarget.cpu_arch == .wasm64) {
+        //64 bit requires an extra parameter in emcc
+        linkWithEmscripten.addArg("-mwasm64");
+    }
     //The app needs to be build first before we can call emcc.
     linkWithEmscripten.step.dependOn(&compileEntrypoint.step);
     b.getInstallStep().dependOn(&linkWithEmscripten.step);

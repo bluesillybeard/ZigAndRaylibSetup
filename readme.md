@@ -9,17 +9,16 @@ Zig is supposedly going to properly support web builds using emscripten in the f
 
 ## How to build
 
-The project builds like any other zig project <br>
+The project builds and runs like any other zig project <br>
 ```bash
-zig build
+zig build run
 ```
 
 However, if you want a web build, things get a bit more complicated
 ```bash
-zig build -Dtarget=wasm64-emscripten --sysroot [path to emsdk]/upstream/emscripten
+zig build run -Dtarget=wasm32-emscripten --sysroot [path to emsdk]/upstream/emscripten
 ```
 the `--sysroot` is required since emscripten itself is required separately from Zig's webassembly compiler.
 
 Once the project has finished building, it can be found in 'zig-out/bin/applicationhtml/'
 
-If you just want to do a quick test:
