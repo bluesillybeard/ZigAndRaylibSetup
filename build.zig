@@ -6,13 +6,8 @@ const BuildError = error{
 pub fn build(b: *std.Build) !void {
     const allocator = b.allocator;
     const stdout = std.io.getStdOut().writer();
-    //get the working directory
     var workingDirectory = std.fs.cwd();
     //defer workingDirectory.close();
-    //print it for debugging purposes.
-    var outBuffer: [std.fs.MAX_PATH_BYTES]u8 = .{};
-    const dir = try workingDirectory.realpath(".", &outBuffer);
-    try stdout.print("Working directory: {s}\n", .{dir});
 
     const target = b.standardTargetOptions(.{});
     const optimize = b.standardOptimizeOption(.{});
@@ -21,15 +16,16 @@ pub fn build(b: *std.Build) !void {
     // but Zig's build system lacks ANY kind of decent documentation AT ALL
     // and I can't for the life of me find a proper way to do this.
     //So what I do instead is build raylib, then link the static library with the app.
+    // This has the benefit that if Raylib ditches Zig's build system (for whatever reason)
+    // it's not too hard to modify this file to work with that.
 
     //First, build raylib.
     var raylibDir = try workingDirectory.openDir("raylib", std.fs.Dir.OpenDirOptions{});
-    //Note that this makes workingDirectoryStr invalid
-    const raylibDirStr = try raylibDir.realpath(".", &outBuffer);
     defer raylibDir.close();
+    var raylibDirStrBuffer: [std.fs.MAX_PATH_BYTES]u8 = .{};
+    const raylibDirStr = try raylibDir.realpath(".", &raylibDirStrBuffer);
 
     //two of the arguments need to be built separately
-    // idk if this is the best way to do it in Zig.
     const targetStr = try target.allocDescription(allocator);
     defer allocator.free(targetStr);
     //build the argument strings - there's probably a better way to do this but I don't really care tbh

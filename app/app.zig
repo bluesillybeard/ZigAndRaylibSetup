@@ -3,7 +3,8 @@ const raylib = @cImport({
     @cInclude("raylib.h");
 });
 
-//This is so the app can be run with emscripten
+//This is so the app can be run with emscripten.
+// see ../entryPoint.c
 export fn run() c_int {
     main() catch {
         return -1;
