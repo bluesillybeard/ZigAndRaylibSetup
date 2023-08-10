@@ -6,7 +6,7 @@ This is a proof of concept, the code that makes it work is pretty hacky at times
 Namely, Emscripten can't find the entry point so I had to make one in C and link that into the project,<br>
 and the Zig application itself is compiled for wasi when the final output is emscripten.
 
-Zig is supposedly going to properly support web builds using emscripten in the future, as suggested [here]()
+Zig is supposedly going to properly support web builds using emscripten in the future, as suggested [here](https://github.com/ziglang/zig/issues/10836)
 
 
 ## How to build
