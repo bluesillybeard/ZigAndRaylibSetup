@@ -1,12 +1,10 @@
 const std = @import("std");
-const general_purpose_allocator = std.heap.GeneralPurposeAllocator(.{});
 
 const BuildError = error{
     RaylibBuildError,
 };
 pub fn build(b: *std.Build) !void {
-    var generalPurposeAllocatorMaker: general_purpose_allocator = .{};
-    const allocator = generalPurposeAllocatorMaker.allocator();
+    const allocator = b.allocator;
     const stdout = std.io.getStdOut().writer();
     //get the working directory
     var workingDirectory = std.fs.cwd();
@@ -29,28 +27,24 @@ pub fn build(b: *std.Build) !void {
     //Note that this makes workingDirectoryStr invalid
     const raylibDirStr = try raylibDir.realpath(".", &outBuffer);
     defer raylibDir.close();
+
     //two of the arguments need to be built separately
     // idk if this is the best way to do it in Zig.
     const targetStr = try target.allocDescription(allocator);
     defer allocator.free(targetStr);
-    try stdout.print("Target:{s}\n", .{targetStr});
-    const optimizationStr = switch (optimize) {
-        .Debug => "Debug",
-        .ReleaseSafe => "ReleaseSafe",
-        .ReleaseFast => "ReleaseFast",
-        .ReleaseSmall => "ReleaseSmall",
-    };
-    try stdout.print("Optimization:{s}\n", .{optimizationStr});
-    //build the argument strings - there's probably a better way to do this bud I don't really care tbh
-    const targetArgument = try allocator.alloc(u8, "-Dtarget=".len + targetStr.len);
+    //build the argument strings - there's probably a better way to do this but I don't really care tbh
+    var targetArgument = try allocator.alloc(u8, "-Dtarget=".len + targetStr.len);
     defer allocator.free(targetArgument);
-    _ = try std.fmt.bufPrint(targetArgument, "{s}{s}", .{ "-Dtarget=", targetStr });
-    // Always build Raylib in fast release, since it's stable and doesn't really need to be the same as our program.
+    targetArgument = try std.fmt.bufPrint(targetArgument, "-Dtarget={s}", .{targetStr});
+    //Always build Raylib in fast release, since it's stable and doesn't really need to be the same as our program.
     // The code that builds the argument to match is commented below
     const optimizeArgument = "-Doptimize=ReleaseFast";
-    //const optimizeArgument = try allocator.alloc(u8, "-Doptimize=".len + optimizationStr.len);
-    //defer allocator.free(optimizeArgument);
-    //_ = try std.fmt.bufPrint(optimizeArgument, "{s}{s}", .{ "-Doptimize=", optimizationStr });
+    // const optimizeArgument = switch (optimize) {
+    //     .Debug => "-Dtarget=Debug",
+    //     .ReleaseSafe => "-Dtarget=ReleaseSafe",
+    //     .ReleaseFast => "-Dtarget=ReleaseFast",
+    //     .ReleaseSmall => "-Dtarget=ReleaseSmall",
+    // };
     //If we are using emscripten, then we need to use emscripten's sysroot
     var argv: []const []const u8 = &[_][]const u8{ "zig", "build", targetArgument, optimizeArgument };
     if (target.getOsTag() == .emscripten) {
@@ -59,16 +53,19 @@ pub fn build(b: *std.Build) !void {
         }
         argv = &[_][]const u8{ "zig", "build", targetArgument, optimizeArgument, "--sysroot", b.sysroot.? };
     }
-    //build arguments
-    try stdout.print("Running command \"{s} {s} {s} {s} {s} {s}\" in folder {s}\n", .{ argv[0], argv[1], argv[2], argv[3], argv[4], argv[5], raylibDirStr });
+    try stdout.print("Running command \"", .{});
+    for (0..argv.len) |i| {
+        try stdout.print("{s} ", .{argv[i]});
+    }
+    try stdout.print("\" in folder {s}\n", .{raylibDirStr});
     const result = try std.ChildProcess.exec(.{
         .allocator = allocator,
         .argv = argv,
         .cwd_dir = raylibDir,
         .max_output_bytes = 50 * 1024,
     });
-    try stdout.print("raylib build output:\"\n{s}\n\"\n", .{result.stdout});
-    try stdout.print("raylib build errors:\"\n{s}\n\"\n", .{result.stderr});
+    if (result.stdout.len > 0) try stdout.print("raylib build output:\"\n{s}\"\n", .{result.stdout});
+    if (result.stderr.len > 0) try stdout.print("raylib build errors:\"\n{s}\"\n", .{result.stderr});
     if (result.stderr.len > 0) {
         return BuildError.RaylibBuildError;
     }
@@ -133,14 +130,17 @@ fn BuildExeNonEmscripten(b: *std.Build, target: std.zig.CrossTarget, optimize: s
         },
     }
     //actually link with Raylib
-    exe.addObjectFile(switch (target.getOsTag()) {
-        .windows => "raylib/zig-out/lib/raylib.lib",
-        .linux => "raylib/zig-out/lib/libraylib.a",
-        .macos => "raylib/zig-out/lib/libraylib.a",
-        else => @panic("Unsupported OS"),
+    exe.addObjectFile(.{
+        .path = switch (target.getOsTag()) {
+            .windows => "raylib/zig-out/lib/raylib.lib",
+            .linux => "raylib/zig-out/lib/libraylib.a",
+            .macos => "raylib/zig-out/lib/libraylib.a",
+            //emscripten is handled separately
+            else => @panic("Unsupported OS"),
+        },
     });
     //So we can include Raylib headers to actually call functions
-    exe.addIncludePath("raylib/zig-out/include");
+    exe.addIncludePath(.{ .path = "raylib/zig-out/include" });
     b.installArtifact(exe);
 }
 fn BuildExeEmscripten(b: *std.Build, target: std.zig.CrossTarget, optimize: std.builtin.OptimizeMode) !void {
@@ -179,22 +179,33 @@ fn BuildExeEmscripten(b: *std.Build, target: std.zig.CrossTarget, optimize: std.
     //Raylib uses libc so we need libc as well
     appLib.linkLibC();
     //actually link with Raylib
-    appLib.addObjectFile("raylib/zig-out/lib/libraylib.a");
+    appLib.addObjectFile(.{ .path = "raylib/zig-out/lib/libraylib.a" });
     //So we can include Raylib headers to actually call functions
-    appLib.addIncludePath("raylib/zig-out/include");
+    appLib.addIncludePath(.{ .path = "raylib/zig-out/include" });
     b.installArtifact(appLib);
+
+    //We need to make sure the user has set the sysroot directory to the correct value.
+    // Raylib already does this, and so does earlier in the build file,
+    // but may as well check it again.
+    if (b.sysroot == null) {
+        @panic("Pass '--sysroot \"[path to emsdk installation]/upstream/emscripten\"'");
+    }
+    //It's worth noting that emcc is actually a shell script that runs a python file.
+    var emccRunArg = try b.allocator.alloc(u8, 2 + b.sysroot.?.len + 5);
+    defer b.allocator.free(emccRunArg);
+    emccRunArg = try std.fmt.bufPrint(emccRunArg, "{s}/emcc", .{b.sysroot.?});
 
     //Emscription is utterly incapible of finding Zig's entry point.
     // However, by creating an external function in our app.zig file that runs the main function,
     // then creating a .c file that calls that function, compiling it separately and linking it later,
     // that problem can be fixed.
-    const compileEntrypoint = b.addSystemCommand(&[_][]const u8{ "emcc", "-c", "entryPoint.c", "-o", "zig-out/bin/entrypoint.o" });
+    const compileEntrypoint = b.addSystemCommand(&[_][]const u8{ emccRunArg, "-c", "entryPoint.c", "-o", "zig-out/bin/entrypoint.o" });
     compileEntrypoint.step.dependOn(&appLib.step);
     //We need to make the output directory
     // because emcc isn't smart enough to create it itself.
     try std.fs.cwd().makePath("zig-out/bin/applicationhtml");
     //                                                             emcc    zig-out/lib/libapplication.a    raylib/zig-out/lib/libraylib.a    -o    zig-out/bin/applicationhtml/index.html    -s FULL_ES3=1    -s    USE_GLFW=3    -s    ASYNCIFY    -s    STANDALONE_WASM    -s    EXPORTED_FUNCTIONS=_run    --no-entry    -O3
-    const linkWithEmscripten = b.addSystemCommand(&[_][]const u8{ "emcc", "zig-out/bin/entrypoint.o", "zig-out/lib/libapplication.a", "raylib/zig-out/lib/libraylib.a", "-o", "zig-out/bin/applicationhtml/index.html", "-sFULL-ES3=1", "-sUSE_GLFW=3", "-sASYNCIFY", "-sSTANDALONE_WASM", "-sEXPORTED_FUNCTIONS=_run", "-O3" });
+    const linkWithEmscripten = b.addSystemCommand(&[_][]const u8{ emccRunArg, "zig-out/bin/entrypoint.o", "zig-out/lib/libapplication.a", "raylib/zig-out/lib/libraylib.a", "-o", "zig-out/bin/applicationhtml/index.html", "-sFULL-ES3=1", "-sUSE_GLFW=3", "-sASYNCIFY", "-sSTANDALONE_WASM", "-sEXPORTED_FUNCTIONS=_run", "-O3" });
     //The app needs to be build first before we can call emcc.
     linkWithEmscripten.step.dependOn(&compileEntrypoint.step);
     b.getInstallStep().dependOn(&linkWithEmscripten.step);
