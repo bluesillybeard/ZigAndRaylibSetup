@@ -24,3 +24,14 @@ the `--sysroot` is required since emscripten itself is required separately from 
 
 Once the project has finished building, it can be found in 'zig-out/bin/applicationhtml/'
 
+## How it works
+
+When the project is built, it first builds Raylib into a static library.<br>
+Then it links that with itself. Pretty standard stuff.<br>
+
+When building for the web though, things get pretty weird.<br>
+Instead of building the project as an executable it creates a static library. <br>
+Then it first builds a special C file that simply boots the Zig code <br>
+since emscripten can't find any entry points within Zig code.<br>
+Then, using Emscripten again, it links all three pieces (the C entry point, the Zig code, and Raylib)<br>
+and outputs the entire thing as an HTML page.
