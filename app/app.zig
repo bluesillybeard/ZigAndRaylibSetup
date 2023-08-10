@@ -19,7 +19,7 @@ pub fn main() !void {
     const screenWidth = 800;
     const screenHeight = 450;
 
-    raylib.InitWindow(screenWidth, screenHeight, "yolo bolo");
+    raylib.InitWindow(screenWidth, screenHeight, "Zig + Raylib + Web = Fun!");
 
     raylib.SetTargetFPS(60); // Set our game to run at 60 frames-per-second
     //--------------------------------------------------------------------------------------
@@ -35,7 +35,7 @@ pub fn main() !void {
         // Draw
         //----------------------------------------------------------------------------------
         raylib.BeginDrawing();
-        raylib.DrawText("yeeol", 10, 10, 50, raylib.WHITE);
+        raylib.DrawText("your codebase are belong to us", 10, 10, 50, raylib.WHITE);
         raylib.EndDrawing();
         //----------------------------------------------------------------------------------
     }

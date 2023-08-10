@@ -66,13 +66,13 @@ pub fn build(b: *std.Build) !void {
         return BuildError.RaylibBuildError;
     }
     if (target.getOsTag() == .emscripten) {
-        //if we are building for webassembly,
+        //if we are building for emscripten,
         // things need to be done differently
         // since Zig and Emscripten are a work on progress.
         try BuildExeEmscripten(b, target, optimize);
-        return;
+    } else {
+        try BuildExeNonEmscripten(b, target, optimize);
     }
-    try BuildExeNonEmscripten(b, target, optimize);
 }
 fn BuildExeNonEmscripten(b: *std.Build, target: std.zig.CrossTarget, optimize: std.builtin.OptimizeMode) !void {
     const exe = b.addExecutable(.{
@@ -137,7 +137,12 @@ fn BuildExeNonEmscripten(b: *std.Build, target: std.zig.CrossTarget, optimize: s
     });
     //So we can include Raylib headers to actually call functions
     exe.addIncludePath(.{ .path = "raylib/zig-out/include" });
+    const run = b.addRunArtifact(exe);
+    const runStep = b.step("run", "Run it");
+    runStep.dependOn(&run.step);
     b.installArtifact(exe);
+
+    //b.getInstallStep().dependOn(run);
 }
 fn BuildExeEmscripten(b: *std.Build, target: std.zig.CrossTarget, optimize: std.builtin.OptimizeMode) !void {
     //Zig doesn't build emscripten executables properly,
@@ -151,8 +156,9 @@ fn BuildExeEmscripten(b: *std.Build, target: std.zig.CrossTarget, optimize: std.
     //this is our "library" that will later be linked into an executable with Emscripten
 
     //zig building to emscripten doesn't really work,
+    // as the standard library doesn't compile properly for some reason
     // So we build to wasi instead.
-    const newTarget = std.zig.CrossTarget{
+    const appTarget = std.zig.CrossTarget{
         .cpu_arch = target.cpu_arch,
         .cpu_model = target.cpu_model,
         .cpu_features_add = target.cpu_features_add,
@@ -168,7 +174,7 @@ fn BuildExeEmscripten(b: *std.Build, target: std.zig.CrossTarget, optimize: std.
     const appLib = b.addStaticLibrary(.{
         .name = "application",
         .root_source_file = .{ .path = "app/app.zig" },
-        .target = newTarget,
+        .target = appTarget,
         .optimize = optimize,
     });
     //appLib.addCSourceFile("app/entryPoint.c", &[_][]const u8{});
@@ -179,7 +185,6 @@ fn BuildExeEmscripten(b: *std.Build, target: std.zig.CrossTarget, optimize: std.
     //So we can include Raylib headers to actually call functions
     appLib.addIncludePath(.{ .path = "raylib/zig-out/include" });
     b.installArtifact(appLib);
-
     //We need to make sure the user has set the sysroot directory to the correct value.
     // Raylib already does this, and so does earlier in the build file,
     // but may as well check it again.
@@ -205,4 +210,13 @@ fn BuildExeEmscripten(b: *std.Build, target: std.zig.CrossTarget, optimize: std.
     //The app needs to be build first before we can call emcc.
     linkWithEmscripten.step.dependOn(&compileEntrypoint.step);
     b.getInstallStep().dependOn(&linkWithEmscripten.step);
+
+    //Finally, add a run artifact
+    var emrunRunArg = try b.allocator.alloc(u8, 2 + b.sysroot.?.len + 6);
+    defer b.allocator.free(emrunRunArg);
+    emrunRunArg = try std.fmt.bufPrint(emrunRunArg, "{s}/emrun", .{b.sysroot.?});
+    const runCommand = b.addSystemCommand(&[_][]const u8{ emrunRunArg, "zig-out/bin/applicationhtml/" });
+    const runStep = b.step("run", "run it lol");
+    runStep.dependOn(&runCommand.step);
+    runCommand.step.dependOn(b.getInstallStep());
 }
