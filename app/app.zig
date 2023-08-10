@@ -1,0 +1,46 @@
+const std = @import("std");
+const raylib = @cImport({
+    @cInclude("raylib.h");
+});
+
+//This is so the app can be run with emscripten
+export fn run() c_int {
+    main() catch {
+        return -1;
+    };
+    return 0;
+}
+
+pub fn main() !void {
+
+    // Initialization
+    //--------------------------------------------------------------------------------------
+    const screenWidth = 800;
+    const screenHeight = 450;
+
+    raylib.InitWindow(screenWidth, screenHeight, "yolo bolo");
+
+    raylib.SetTargetFPS(60); // Set our game to run at 60 frames-per-second
+    //--------------------------------------------------------------------------------------
+
+    // Main game loop
+    while (!raylib.WindowShouldClose()) // Detect window close button or ESC key
+    {
+        // Update
+        //----------------------------------------------------------------------------------
+        // TODO: Update your variables here
+        //----------------------------------------------------------------------------------
+
+        // Draw
+        //----------------------------------------------------------------------------------
+        raylib.BeginDrawing();
+        raylib.DrawText("yeeol", 10, 10, 50, raylib.WHITE);
+        raylib.EndDrawing();
+        //----------------------------------------------------------------------------------
+    }
+
+    // De-Initialization
+    //--------------------------------------------------------------------------------------
+    raylib.CloseWindow(); // Close window and OpenGL context
+    //--------------------------------------------------------------------------------------
+}
